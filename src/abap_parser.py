@@ -255,11 +255,26 @@ class AbapStatement:
 
 
 @dataclass
+class IncludeResolution:
+    """Result of resolving an INCLUDE statement."""
+    include_name: str
+    resolved_path: str = ""
+    found: bool = False
+    data_declarations: List[AbapDataDeclaration] = field(default_factory=list)
+    tables_declarations: List[str] = field(default_factory=list)
+    tables_used: set = field(default_factory=set)
+    nested_includes: List[str] = field(default_factory=list)
+    line_count: int = 0
+    error: str = ""
+
+
+@dataclass
 class AbapProgram:
     report_name: str = ""
     program_type: str = ""
     source_file: str = ""
     includes: List[str] = field(default_factory=list)
+    include_resolutions: List[IncludeResolution] = field(default_factory=list)
     data_declarations: List[AbapDataDeclaration] = field(default_factory=list)
     field_symbols: List[str] = field(default_factory=list)
     select_statements: List[AbapSelectStatement] = field(default_factory=list)
@@ -284,8 +299,12 @@ class AbapProgram:
 class AbapParser:
     """Parse ABAP source code into a structured AbapProgram AST."""
 
-    def __init__(self, encoding: str = "utf-8"):
+    def __init__(self, encoding: str = "utf-8", resolve_includes: bool = True,
+                 max_include_depth: int = 5):
         self.encoding = encoding
+        self.resolve_includes = resolve_includes
+        self.max_include_depth = max_include_depth
+        self._resolved_includes: set = set()  # Prevent circular includes
 
     # ------------------------------------------------------------------
     # Public API
@@ -297,6 +316,12 @@ class AbapParser:
             source = f.read()
         program = self.parse_string(source)
         program.source_file = filepath
+
+        # Resolve INCLUDE statements by searching for files in the same directory
+        if self.resolve_includes and program.includes:
+            self._resolved_includes = set()
+            self._resolve_includes(program, filepath, depth=0)
+
         return program
 
     def parse_string(self, source: str) -> AbapProgram:
@@ -317,6 +342,164 @@ class AbapParser:
         # Walk through all statements and build the AST
         self._build_ast(stmt_tuples, program)
         return program
+
+    # ------------------------------------------------------------------
+    # INCLUDE resolution
+    # ------------------------------------------------------------------
+
+    def _resolve_includes(self, program: AbapProgram, parent_path: str, depth: int):
+        """Resolve INCLUDE statements by finding and parsing included files.
+
+        Searches for include files in:
+        1. Same directory as the parent file
+        2. Subdirectories of the parent directory
+
+        Supported naming patterns:
+        - <include_name>.abap
+        - <include_name>.txt
+        - <include_name>.prog
+        - <include_name> (no extension)
+        """
+        if depth >= self.max_include_depth:
+            return
+
+        import os
+        parent_dir = os.path.dirname(os.path.abspath(parent_path))
+
+        for inc_name in program.includes:
+            inc_upper = inc_name.upper()
+            if inc_upper in self._resolved_includes:
+                continue
+            self._resolved_includes.add(inc_upper)
+
+            resolution = IncludeResolution(include_name=inc_name)
+
+            # Search for the include file
+            inc_path = self._find_include_file(inc_name, parent_dir)
+            if not inc_path:
+                resolution.found = False
+                resolution.error = f"Include file not found: {inc_name}"
+                program.include_resolutions.append(resolution)
+                continue
+
+            resolution.resolved_path = inc_path
+            resolution.found = True
+
+            try:
+                with open(inc_path, "r", encoding=self.encoding, errors="replace") as f:
+                    inc_source = f.read()
+
+                resolution.line_count = len(inc_source.splitlines())
+
+                # Parse the include file (without re-resolving its includes at this level)
+                inc_lines = inc_source.splitlines(keepends=False)
+                inc_stmts = self._preprocess(inc_lines)
+                inc_program = AbapProgram()
+                inc_program.source_file = inc_path
+                self._build_ast(inc_stmts, inc_program)
+
+                # Merge data declarations from include into the main program
+                for decl in inc_program.data_declarations:
+                    resolution.data_declarations.append(decl)
+                    program.data_declarations.append(decl)
+
+                # Merge TABLES declarations
+                for tbl in inc_program.tables_declarations:
+                    resolution.tables_declarations.append(tbl)
+                    if tbl not in program.tables_declarations:
+                        program.tables_declarations.append(tbl)
+
+                # Merge tables_used
+                resolution.tables_used = inc_program.tables_used
+                program.tables_used.update(inc_program.tables_used)
+
+                # Merge field_symbols
+                for fs in inc_program.field_symbols:
+                    if fs not in program.field_symbols:
+                        program.field_symbols.append(fs)
+
+                # Merge function calls
+                for fc in inc_program.function_calls:
+                    program.function_calls.append(fc)
+                    program.function_modules_used.add(fc.function_name)
+                    if fc.is_bapi:
+                        program.bapis_used.add(fc.function_name)
+
+                # Merge select statements
+                for sel in inc_program.select_statements:
+                    program.select_statements.append(sel)
+
+                # Merge form routines
+                for form in inc_program.form_routines:
+                    program.form_routines.append(form)
+
+                # Merge class definitions
+                for cls in inc_program.class_definitions:
+                    program.class_definitions.append(cls)
+
+                # Track EXEC SQL
+                if inc_program.has_exec_sql:
+                    program.has_exec_sql = True
+
+                # Track nested includes
+                resolution.nested_includes = inc_program.includes[:]
+
+                # Recursively resolve nested includes
+                if inc_program.includes:
+                    self._resolve_includes(inc_program, inc_path, depth + 1)
+                    # Bring nested resolutions into main program
+                    for nested_res in inc_program.include_resolutions:
+                        program.include_resolutions.append(nested_res)
+                    # Also merge any data found from nested includes
+                    program.tables_used.update(inc_program.tables_used)
+                    program.function_modules_used.update(inc_program.function_modules_used)
+                    program.bapis_used.update(inc_program.bapis_used)
+
+            except Exception as e:
+                resolution.found = True
+                resolution.error = f"Error parsing include: {str(e)}"
+
+            program.include_resolutions.append(resolution)
+
+    @staticmethod
+    def _find_include_file(include_name: str, search_dir: str) -> Optional[str]:
+        """Search for an include file by name in the given directory and subdirectories.
+
+        Tries multiple naming conventions:
+        - exact name, name.abap, name.txt, name.prog, name.ABAP
+        - case-insensitive matching
+        """
+        import os
+        candidates = [
+            include_name,
+            include_name + ".abap",
+            include_name + ".txt",
+            include_name + ".prog",
+            include_name + ".ABAP",
+            include_name.lower(),
+            include_name.lower() + ".abap",
+            include_name.lower() + ".txt",
+            include_name.lower() + ".prog",
+        ]
+
+        # Search in the same directory first
+        for candidate in candidates:
+            full_path = os.path.join(search_dir, candidate)
+            if os.path.isfile(full_path):
+                return full_path
+
+        # Search in subdirectories (one level deep)
+        try:
+            for entry in os.scandir(search_dir):
+                if entry.is_dir():
+                    for candidate in candidates:
+                        full_path = os.path.join(entry.path, candidate)
+                        if os.path.isfile(full_path):
+                            return full_path
+        except OSError:
+            pass
+
+        return None
 
     # ------------------------------------------------------------------
     # Preprocessing
@@ -1400,9 +1583,10 @@ class AbapParser:
 # Convenience functions
 # ---------------------------------------------------------------------------
 
-def parse_abap_file(filepath: str, encoding: str = "utf-8") -> AbapProgram:
+def parse_abap_file(filepath: str, encoding: str = "utf-8",
+                     resolve_includes: bool = True) -> AbapProgram:
     """Parse an ABAP source file and return an AbapProgram AST."""
-    parser = AbapParser(encoding=encoding)
+    parser = AbapParser(encoding=encoding, resolve_includes=resolve_includes)
     return parser.parse_file(filepath)
 
 

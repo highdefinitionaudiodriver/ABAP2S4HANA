@@ -126,6 +126,11 @@ class SimplificationRules:
     # Rule initialization methods
     # ----------------------------------------------------------------
 
+    @property
+    def select_rewrite_rules(self) -> List[SimplificationRule]:
+        """Get SELECT rewrite rules for table migration (JOIN simplification etc.)."""
+        return [rule for rule in self._rules if rule.category == "SELECT_REWRITE"]
+
     def _init_all_rules(self):
         """Initialize all simplification rules."""
         self._init_fi_co_rules()
@@ -134,6 +139,7 @@ class SimplificationRules:
         self._init_bp_rules()
         self._init_abap_syntax_rules()
         self._init_sql_rules()
+        self._init_select_rewrite_rules()
         self._init_fm_rules()
         self._init_cross_module_rules()
 
@@ -966,6 +972,252 @@ class SimplificationRules:
             auto_fix=False,
             notes="SELECT...ENDSELECT performs row-by-row data transfer. Bulk fetch with "
                   "INTO TABLE is strongly recommended for HANA performance.",
+        ))
+
+    # ----------------------------------------------------------------
+    # SELECT Rewrite Rules (JOIN simplification for table migration)
+    # ----------------------------------------------------------------
+
+    def _init_select_rewrite_rules(self):
+        """Initialize SELECT auto-rewrite rules for MATDOC/ACDOCA migration.
+
+        These rules detect JOIN patterns between old ECC tables and provide
+        automatic rewrite guidance when the joined tables merge into a single
+        S/4HANA table (e.g., MKPF+MSEG→MATDOC, BKPF+BSEG→ACDOCA).
+        """
+
+        # ---- MM: MKPF JOIN MSEG → single MATDOC select ----
+        self._rules.append(SimplificationRule(
+            rule_id="SELRW_MM_001",
+            category="SELECT_REWRITE",
+            sap_module="MM",
+            severity="AUTO",
+            old_pattern="MKPF JOIN MSEG",
+            new_pattern="MATDOC",
+            description="SELECT with MKPF INNER JOIN MSEG can be simplified to a single SELECT "
+                        "from MATDOC. In S/4HANA, MATDOC merges header (MKPF) and item (MSEG) "
+                        "data into one table, eliminating the need for JOINs.",
+            description_ja="MKPF INNER JOIN MSEGのSELECTは、MATDOCへの単一SELECTに簡略化できます。"
+                           "S/4HANAではMATDOCがヘッダ(MKPF)と明細(MSEG)を統合しているため、"
+                           "JOINが不要になります。",
+            field_mapping={
+                "MKPF~MBLNR": "MBLNR", "MKPF~MJAHR": "MJAHR",
+                "MKPF~BUDAT": "BUDAT_MKPF", "MKPF~BLDAT": "BLDAT",
+                "MKPF~USNAM": "USNAM", "MKPF~XBLNR": "XBLNR",
+                "MSEG~ZEILE": "MBLPO", "MSEG~BWART": "BWART",
+                "MSEG~MATNR": "MATNR", "MSEG~WERKS": "WERKS",
+                "MSEG~LGORT": "LGORT", "MSEG~MENGE": "ERFMG",
+                "MSEG~MEINS": "ERFME", "MSEG~DMBTR": "DMBTR_STOCK",
+                "MSEG~EBELN": "EBELN", "MSEG~EBELP": "EBELP",
+            },
+            auto_fix=True,
+            notes="The ON condition (MKPF~MBLNR = MSEG~MBLNR AND MKPF~MJAHR = MSEG~MJAHR) "
+                  "is eliminated since both are now columns in the same MATDOC row.",
+        ))
+
+        # ---- MM: MSEG subselect with MKPF condition → MATDOC ----
+        self._rules.append(SimplificationRule(
+            rule_id="SELRW_MM_002",
+            category="SELECT_REWRITE",
+            sap_module="MM",
+            severity="AUTO",
+            old_pattern="MSEG WHERE MBLNR IN (SELECT MBLNR FROM MKPF)",
+            new_pattern="MATDOC (direct WHERE on header fields)",
+            description="Nested SELECT on MSEG with subquery on MKPF can be simplified to a "
+                        "single MATDOC query. Header fields (BUDAT, USNAM etc.) are directly "
+                        "available on MATDOC rows.",
+            description_ja="MKPF副問合せ付きのMSEG SELECTは、MATDOCへの単一クエリに簡略化できます。"
+                           "ヘッダフィールド(BUDAT, USNAM等)はMATDOC行に直接含まれています。",
+            field_mapping={
+                "MSEG~MBLNR": "MBLNR", "MSEG~MJAHR": "MJAHR",
+                "MKPF~BUDAT": "BUDAT_MKPF", "MKPF~USNAM": "USNAM",
+            },
+            auto_fix=True,
+            notes="Subquery elimination: WHERE conditions on MKPF fields become direct "
+                  "WHERE conditions on MATDOC columns.",
+        ))
+
+        # ---- FI: BKPF JOIN BSEG → single ACDOCA select ----
+        self._rules.append(SimplificationRule(
+            rule_id="SELRW_FI_001",
+            category="SELECT_REWRITE",
+            sap_module="FI",
+            severity="REVIEW",
+            old_pattern="BKPF JOIN BSEG",
+            new_pattern="ACDOCA",
+            description="SELECT with BKPF INNER JOIN BSEG can be simplified to a single SELECT "
+                        "from ACDOCA (Universal Journal). ACDOCA contains both header and item "
+                        "data. Note: field names change significantly (BUKRS→RBUKRS, etc.).",
+            description_ja="BKPF INNER JOIN BSEGのSELECTは、ACDOCA(ユニバーサルジャーナル)への"
+                           "単一SELECTに簡略化できます。ACDOCAにはヘッダと明細データの両方が含まれます。"
+                           "注意: フィールド名が大幅に変更されます(BUKRS→RBUKRS等)。",
+            field_mapping={
+                "BKPF~BUKRS": "RBUKRS", "BKPF~BELNR": "BELNR",
+                "BKPF~GJAHR": "GJAHR", "BKPF~BLART": "BLART",
+                "BKPF~BUDAT": "BUDAT", "BKPF~BLDAT": "BLDAT",
+                "BSEG~BUZEI": "DOCLN", "BSEG~KOART": "KOART",
+                "BSEG~SHKZG": "DRCRK", "BSEG~DMBTR": "HSL",
+                "BSEG~WRBTR": "TSL", "BSEG~HKONT": "RACCT",
+                "BSEG~KOSTL": "RCNTR", "BSEG~PRCTR": "PRCTR",
+            },
+            auto_fix=False,
+            notes="BSEG is a cluster table in ECC. ACDOCA is a transparent table. "
+                  "Field mapping review is essential. ON condition is eliminated.",
+        ))
+
+        # ---- FI: BSEG subselect with BKPF condition → ACDOCA ----
+        self._rules.append(SimplificationRule(
+            rule_id="SELRW_FI_002",
+            category="SELECT_REWRITE",
+            sap_module="FI",
+            severity="REVIEW",
+            old_pattern="BSEG WHERE BELNR IN (SELECT BELNR FROM BKPF)",
+            new_pattern="ACDOCA (direct WHERE on header fields)",
+            description="Nested SELECT on BSEG with subquery on BKPF can be simplified to a "
+                        "single ACDOCA query with direct WHERE conditions on header fields.",
+            description_ja="BKPF副問合せ付きのBSEG SELECTは、ACDOCAへの単一クエリに簡略化できます。"
+                           "ヘッダフィールドへのWHERE条件は直接ACDOCAカラムに指定します。",
+            field_mapping={
+                "BSEG~BUKRS": "RBUKRS", "BSEG~BELNR": "BELNR",
+                "BKPF~BUDAT": "BUDAT", "BKPF~BLART": "BLART",
+            },
+            auto_fix=False,
+            notes="Subquery elimination + field mapping. Requires careful review of "
+                  "WHERE clause field references.",
+        ))
+
+        # ---- FI: BSEG+BSIS/BSAS open/cleared items → ACDOCA with AUGDT ----
+        self._rules.append(SimplificationRule(
+            rule_id="SELRW_FI_003",
+            category="SELECT_REWRITE",
+            sap_module="FI",
+            severity="REVIEW",
+            old_pattern="BSIS UNION BSAS",
+            new_pattern="ACDOCA (use AUGDT to distinguish open/cleared)",
+            description="Separate queries on BSIS (open items) and BSAS (cleared items) "
+                        "can be unified into a single ACDOCA query. Use AUGDT IS INITIAL "
+                        "for open items and AUGDT IS NOT INITIAL for cleared items.",
+            description_ja="BSIS(未消込)とBSAS(消込済)への個別クエリは、ACDOCAへの単一クエリに"
+                           "統合できます。未消込: AUGDT IS INITIAL、消込済: AUGDT IS NOT INITIAL。",
+            field_mapping={
+                "BUKRS": "RBUKRS", "HKONT": "RACCT",
+                "BELNR": "BELNR", "GJAHR": "GJAHR",
+                "DMBTR": "HSL", "WRBTR": "TSL",
+            },
+            auto_fix=False,
+            notes="BSIS/BSAS distinction is replaced by AUGDT (clearing date) filter. "
+                  "Open items: AUGDT = '00000000' or IS INITIAL. Cleared: NOT INITIAL.",
+        ))
+
+        # ---- FI: BSID/BSAD customer open/cleared → ACDOCA ----
+        self._rules.append(SimplificationRule(
+            rule_id="SELRW_FI_004",
+            category="SELECT_REWRITE",
+            sap_module="FI",
+            severity="REVIEW",
+            old_pattern="BSID UNION BSAD",
+            new_pattern="ACDOCA WHERE KOART = 'D'",
+            description="Separate queries on BSID/BSAD (customer open/cleared items) can be "
+                        "unified into ACDOCA WHERE KOART = 'D'. Use AUGDT for open/cleared.",
+            description_ja="BSID/BSAD(得意先未消込/消込済)への個別クエリは、ACDOCA WHERE "
+                           "KOART = 'D'に統合できます。未消込/消込済はAUGDTで判別します。",
+            field_mapping={
+                "BUKRS": "RBUKRS", "KUNNR": "KUNNR",
+                "BELNR": "BELNR", "GJAHR": "GJAHR",
+                "DMBTR": "HSL", "WRBTR": "TSL",
+            },
+            auto_fix=False,
+            notes="Customer subledger: KOART = 'D' in ACDOCA. Add AUGDT filter as needed.",
+        ))
+
+        # ---- FI: BSIK/BSAK vendor open/cleared → ACDOCA ----
+        self._rules.append(SimplificationRule(
+            rule_id="SELRW_FI_005",
+            category="SELECT_REWRITE",
+            sap_module="FI",
+            severity="REVIEW",
+            old_pattern="BSIK UNION BSAK",
+            new_pattern="ACDOCA WHERE KOART = 'K'",
+            description="Separate queries on BSIK/BSAK (vendor open/cleared items) can be "
+                        "unified into ACDOCA WHERE KOART = 'K'. Use AUGDT for open/cleared.",
+            description_ja="BSIK/BSAK(仕入先未消込/消込済)への個別クエリは、ACDOCA WHERE "
+                           "KOART = 'K'に統合できます。未消込/消込済はAUGDTで判別します。",
+            field_mapping={
+                "BUKRS": "RBUKRS", "LIFNR": "LIFNR",
+                "BELNR": "BELNR", "GJAHR": "GJAHR",
+                "DMBTR": "HSL", "WRBTR": "TSL",
+            },
+            auto_fix=False,
+            notes="Vendor subledger: KOART = 'K' in ACDOCA. Add AUGDT filter as needed.",
+        ))
+
+        # ---- CO: COSS JOIN COSP → ACDOCA ----
+        self._rules.append(SimplificationRule(
+            rule_id="SELRW_CO_001",
+            category="SELECT_REWRITE",
+            sap_module="CO",
+            severity="REVIEW",
+            old_pattern="COSS UNION COSP",
+            new_pattern="ACDOCA",
+            description="Separate queries on COSS (internal) and COSP (external) CO postings "
+                        "can be unified into a single ACDOCA query. Both internal and external "
+                        "CO line items are in the Universal Journal.",
+            description_ja="COSS(内部)とCOSP(外部)CO転記への個別クエリは、ACDOCAへの単一クエリに"
+                           "統合できます。内部・外部CO明細は共にユニバーサルジャーナルに含まれます。",
+            field_mapping={
+                "OBJNR": "OBJNR", "GJAHR": "GJAHR",
+                "KSTAR": "RACCT", "WKG001-016": "HSL (per period → line item)",
+            },
+            auto_fix=False,
+            notes="CO period-based totals (WKG001-WKG016) are replaced by individual "
+                  "line items in ACDOCA. Aggregation logic must be adjusted.",
+        ))
+
+        # ---- FI: GLT0/FAGLFLEXT period totals → ACDOCA SUM ----
+        self._rules.append(SimplificationRule(
+            rule_id="SELRW_FI_006",
+            category="SELECT_REWRITE",
+            sap_module="FI",
+            severity="REVIEW",
+            old_pattern="GLT0 SELECT HSLxx",
+            new_pattern="SELECT SUM( HSL ) FROM ACDOCA GROUP BY period",
+            description="Period-based totals from GLT0/FAGLFLEXT (HSL01-HSL16 columns) are "
+                        "replaced by SUM aggregation on ACDOCA. Use GROUP BY POPER (posting "
+                        "period) to reproduce period columns.",
+            description_ja="GLT0/FAGLFLEXTの期間別合計(HSL01-HSL16カラム)はACDOCAのSUM集計に"
+                           "置き換えます。期間カラムを再現するにはGROUP BY POPER(転記期間)を使用します。",
+            field_mapping={
+                "HSL01": "SUM(HSL) WHERE POPER='001'",
+                "HSL02": "SUM(HSL) WHERE POPER='002'",
+                "HSLxx": "SUM(HSL) WHERE POPER='0xx'",
+                "RACCT": "RACCT", "RBUKRS": "RBUKRS",
+            },
+            auto_fix=False,
+            notes="Period column access (HSL01, HSL02, ..., HSL16) must be rewritten as "
+                  "aggregation with period filter. Significant query restructuring needed.",
+        ))
+
+        # ---- SD: KONV JOIN VBAK/VBAP → PRCD_ELEMENTS ----
+        self._rules.append(SimplificationRule(
+            rule_id="SELRW_SD_001",
+            category="SELECT_REWRITE",
+            sap_module="SD",
+            severity="REVIEW",
+            old_pattern="KONV JOIN VBAK",
+            new_pattern="PRCD_ELEMENTS",
+            description="SELECT with KONV (pricing conditions) joined to VBAK/VBAP can be "
+                        "simplified by replacing KONV with PRCD_ELEMENTS. The join structure "
+                        "may also be simplified as PRCD_ELEMENTS has additional reference fields.",
+            description_ja="KONV(価格条件)とVBAK/VBAPのJOIN SELECTは、KONVをPRCD_ELEMENTSに"
+                           "置き換えることで簡略化できます。PRCD_ELEMENTSは追加の参照フィールドを持ちます。",
+            field_mapping={
+                "KONV~KNUMV": "KNUMV", "KONV~KPOSN": "KPOSN",
+                "KONV~KSCHL": "KSCHL", "KONV~KBETR": "KBETR",
+                "KONV~KWERT": "KWERT",
+            },
+            auto_fix=False,
+            notes="KONV (cluster table) → PRCD_ELEMENTS (transparent table). "
+                  "Join conditions may need adjustment.",
         ))
 
     # ----------------------------------------------------------------

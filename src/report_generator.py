@@ -101,6 +101,9 @@ class ReportGenerator:
     </div>
 </div>
 
+<!-- Migration Readiness Dashboard -->
+{self._render_dashboard(total_auto, total_review, total_manual, total_changes, by_file, all_changes)}
+
 <!-- Changes by SAP Module -->
 <div class="section">
     <h2>Changes by SAP Module</h2>
@@ -159,6 +162,19 @@ function toggleFile(id) {{
     }} else {{
         el.style.display = 'none';
     }}
+}}
+function filterStream(severity) {{
+    var items = document.querySelectorAll('.stream-item');
+    var btns = document.querySelectorAll('.stream-filter-btn');
+    btns.forEach(function(b) {{ b.classList.remove('active'); }});
+    event.target.classList.add('active');
+    items.forEach(function(item) {{
+        if (severity === 'all' || item.getAttribute('data-severity') === severity) {{
+            item.style.display = 'block';
+        }} else {{
+            item.style.display = 'none';
+        }}
+    }});
 }}
 </script>
 
@@ -336,11 +352,285 @@ body {
     color: #95a5a6;
     font-size: 12px;
 }
+/* Dashboard */
+.dashboard {
+    background: white;
+    border-radius: 8px;
+    padding: 24px;
+    margin-bottom: 24px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+}
+.dashboard h2 {
+    font-size: 18px;
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #ecf0f1;
+    color: #2c3e50;
+}
+.dashboard-grid {
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    gap: 24px;
+    align-items: start;
+}
+/* Donut chart */
+.donut-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+.donut-chart {
+    position: relative;
+    width: 200px;
+    height: 200px;
+}
+.donut-chart svg { transform: rotate(-90deg); }
+.donut-center {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+}
+.donut-center .pct { font-size: 28px; font-weight: bold; color: #27ae60; }
+.donut-center .pct-label { font-size: 12px; color: #7f8c8d; }
+.donut-legend {
+    display: flex;
+    gap: 16px;
+    margin-top: 16px;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+}
+.legend-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    display: inline-block;
+}
+.legend-dot.auto { background: #27ae60; }
+.legend-dot.review { background: #f39c12; }
+.legend-dot.manual { background: #e74c3c; }
+/* File readiness list */
+.file-readiness-list { max-height: 340px; overflow-y: auto; }
+.file-readiness-item {
+    display: flex;
+    align-items: center;
+    padding: 8px 12px;
+    border-bottom: 1px solid #f0f0f0;
+    gap: 12px;
+}
+.file-readiness-item:last-child { border-bottom: none; }
+.file-readiness-name {
+    flex: 1;
+    font-size: 13px;
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.readiness-bar {
+    width: 160px;
+    height: 16px;
+    background: #ecf0f1;
+    border-radius: 8px;
+    overflow: hidden;
+    display: flex;
+}
+.readiness-seg-auto { background: #27ae60; height: 100%; }
+.readiness-seg-review { background: #f39c12; height: 100%; }
+.readiness-seg-manual { background: #e74c3c; height: 100%; }
+.readiness-score {
+    min-width: 48px;
+    text-align: right;
+    font-size: 13px;
+    font-weight: 600;
+}
+.readiness-score.high { color: #27ae60; }
+.readiness-score.medium { color: #f39c12; }
+.readiness-score.low { color: #e74c3c; }
+/* Change stream */
+.change-stream {
+    background: white;
+    border-radius: 8px;
+    padding: 24px;
+    margin-bottom: 24px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+}
+.change-stream h2 {
+    font-size: 18px;
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #ecf0f1;
+    color: #2c3e50;
+}
+.stream-filters {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+}
+.stream-filter-btn {
+    padding: 5px 14px;
+    border: 1px solid #ddd;
+    border-radius: 16px;
+    background: white;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+.stream-filter-btn:hover { background: #f0f0f0; }
+.stream-filter-btn.active { background: #2c3e50; color: white; border-color: #2c3e50; }
+.stream-filter-btn.auto-btn.active { background: #27ae60; border-color: #27ae60; }
+.stream-filter-btn.review-btn.active { background: #f39c12; border-color: #f39c12; }
+.stream-filter-btn.manual-btn.active { background: #e74c3c; border-color: #e74c3c; }
+.stream-list { max-height: 400px; overflow-y: auto; }
+.stream-item {
+    padding: 10px 14px;
+    border-left: 4px solid #bdc3c7;
+    margin-bottom: 6px;
+    font-size: 13px;
+    background: #fafafa;
+    border-radius: 0 4px 4px 0;
+    transition: opacity 0.3s;
+}
+.stream-item.auto { border-left-color: #27ae60; background: #f0faf0; }
+.stream-item.review { border-left-color: #f39c12; background: #fffbf0; }
+.stream-item.manual { border-left-color: #e74c3c; background: #fff5f5; }
+.stream-item .stream-file { font-weight: 600; color: #2c3e50; }
+.stream-item .stream-line { color: #7f8c8d; font-size: 12px; }
+.stream-item .stream-desc { margin-top: 2px; }
+.stream-item .stream-values { font-family: 'Consolas', monospace; font-size: 12px; color: #555; margin-top: 2px; }
 @media (max-width: 768px) {
     .summary-grid { grid-template-columns: repeat(2, 1fr); }
     .bar-container { width: 100px; }
+    .dashboard-grid { grid-template-columns: 1fr; }
 }
 """
+
+    def _render_dashboard(
+        self, total_auto: int, total_review: int, total_manual: int,
+        total_changes: int, by_file: dict, all_changes: list
+    ) -> str:
+        """Render the migration readiness dashboard with donut chart and file breakdown."""
+        if total_changes == 0:
+            return ""
+
+        auto_pct = (total_auto / total_changes * 100) if total_changes else 0
+        review_pct = (total_review / total_changes * 100) if total_changes else 0
+        manual_pct = (total_manual / total_changes * 100) if total_changes else 0
+
+        # SVG donut chart using stroke-dasharray
+        radius = 85
+        circumference = 2 * 3.14159 * radius
+        auto_dash = circumference * auto_pct / 100
+        review_dash = circumference * review_pct / 100
+        manual_dash = circumference * manual_pct / 100
+
+        auto_offset = 0
+        review_offset = -auto_dash
+        manual_offset = -(auto_dash + review_dash)
+
+        # File readiness items
+        file_items = []
+        for filepath, changes in sorted(by_file.items()):
+            f_auto = sum(1 for c in changes if c.severity == "AUTO")
+            f_review = sum(1 for c in changes if c.severity == "REVIEW")
+            f_manual = sum(1 for c in changes if c.severity == "MANUAL")
+            f_total = f_auto + f_review + f_manual
+            if f_total == 0:
+                continue
+            score = (f_auto / f_total * 100) if f_total else 0
+            auto_w = f_auto / f_total * 100
+            review_w = f_review / f_total * 100
+            manual_w = f_manual / f_total * 100
+
+            score_class = "high" if score >= 70 else ("medium" if score >= 40 else "low")
+            display_name = os.path.basename(filepath) if filepath else "(unknown)"
+            file_items.append(f"""<div class="file-readiness-item">
+    <span class="file-readiness-name" title="{_escape_html(filepath)}">{_escape_html(display_name)}</span>
+    <div class="readiness-bar">
+        <div class="readiness-seg-auto" style="width:{auto_w:.1f}%"></div>
+        <div class="readiness-seg-review" style="width:{review_w:.1f}%"></div>
+        <div class="readiness-seg-manual" style="width:{manual_w:.1f}%"></div>
+    </div>
+    <span class="readiness-score {score_class}">{score:.0f}%</span>
+</div>""")
+
+        # Change stream (all changes sorted by severity priority: manual first, then review, then auto)
+        severity_order = {"MANUAL": 0, "REVIEW": 1, "AUTO": 2}
+        sorted_changes = sorted(
+            all_changes,
+            key=lambda c: (severity_order.get(c.severity, 3), c.file, c.line_number)
+        )
+        stream_items = []
+        for c in sorted_changes[:100]:  # Limit to first 100 for performance
+            sev_class = c.severity.lower()
+            display_file = os.path.basename(c.file) if c.file else "(unknown)"
+            stream_items.append(
+                f"""<div class="stream-item {sev_class}" data-severity="{sev_class}">
+    <span class="badge badge-{sev_class}">{c.severity}</span>
+    <span class="stream-file">{_escape_html(display_file)}</span>
+    <span class="stream-line">Line {c.line_number} | {c.category}</span>
+    <div class="stream-desc">{_escape_html(c.description[:120])}</div>
+    <div class="stream-values">{_escape_html(c.old_value)} → {_escape_html(c.new_value)}</div>
+</div>"""
+            )
+
+        return f"""<div class="dashboard">
+    <h2>Migration Readiness Dashboard</h2>
+    <div class="dashboard-grid">
+        <div class="donut-container">
+            <div class="donut-chart">
+                <svg width="200" height="200" viewBox="0 0 200 200">
+                    <circle cx="100" cy="100" r="{radius}" fill="none" stroke="#ecf0f1" stroke-width="22"/>
+                    <circle cx="100" cy="100" r="{radius}" fill="none" stroke="#27ae60" stroke-width="22"
+                        stroke-dasharray="{auto_dash:.1f} {circumference:.1f}"
+                        stroke-dashoffset="{auto_offset:.1f}"/>
+                    <circle cx="100" cy="100" r="{radius}" fill="none" stroke="#f39c12" stroke-width="22"
+                        stroke-dasharray="{review_dash:.1f} {circumference:.1f}"
+                        stroke-dashoffset="{review_offset:.1f}"/>
+                    <circle cx="100" cy="100" r="{radius}" fill="none" stroke="#e74c3c" stroke-width="22"
+                        stroke-dasharray="{manual_dash:.1f} {circumference:.1f}"
+                        stroke-dashoffset="{manual_offset:.1f}"/>
+                </svg>
+                <div class="donut-center">
+                    <div class="pct">{auto_pct:.0f}%</div>
+                    <div class="pct-label">Auto-Ready</div>
+                </div>
+            </div>
+            <div class="donut-legend">
+                <div class="legend-item"><span class="legend-dot auto"></span> Auto ({total_auto})</div>
+                <div class="legend-item"><span class="legend-dot review"></span> Review ({total_review})</div>
+                <div class="legend-item"><span class="legend-dot manual"></span> Manual ({total_manual})</div>
+            </div>
+        </div>
+        <div>
+            <h3 style="font-size:14px; margin-bottom:8px; color:#7f8c8d;">File Readiness</h3>
+            <div class="file-readiness-list">
+                {"".join(file_items)}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="change-stream">
+    <h2>Change Stream — Visual Breakdown</h2>
+    <div class="stream-filters">
+        <button class="stream-filter-btn active" onclick="filterStream('all')">All ({len(all_changes)})</button>
+        <button class="stream-filter-btn auto-btn" onclick="filterStream('auto')">Auto ({total_auto})</button>
+        <button class="stream-filter-btn review-btn" onclick="filterStream('review')">Review ({total_review})</button>
+        <button class="stream-filter-btn manual-btn" onclick="filterStream('manual')">Manual ({total_manual})</button>
+    </div>
+    <div class="stream-list" id="streamList">
+        {"".join(stream_items)}
+    </div>
+</div>"""
 
     def _render_module_rows(self, by_module: Counter, total: int) -> str:
         """Render SAP module breakdown table rows."""
@@ -374,6 +664,7 @@ body {
         """Render category breakdown table rows."""
         cat_names = {
             "TABLE": "Table Replacements",
+            "SELECT_REWRITE": "SELECT Rewrite (JOIN Simplification)",
             "FUNCTION_MODULE": "Function Module Changes",
             "BAPI": "BAPI Changes",
             "SYNTAX": "Syntax Modernization",

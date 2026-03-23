@@ -120,6 +120,11 @@ class S4Transformer:
                     transformed_text, line_num, stmt, source_file, result
                 )
 
+            if self.options.convert_tables:
+                transformed_text = self._transform_select_rewrite(
+                    transformed_text, line_num, stmt, source_file, result
+                )
+
             if self.options.modernize_syntax:
                 transformed_text = self._transform_sql_syntax(
                     transformed_text, line_num, stmt, source_file, result
@@ -307,6 +312,135 @@ class S4Transformer:
             description=rule.description,
             description_ja=rule.description_ja,
         ))
+
+        return text
+
+    # ------------------------------------------------------------------ #
+    #  SELECT Rewrite Transformation (JOIN simplification)                #
+    # ------------------------------------------------------------------ #
+
+    def _transform_select_rewrite(
+        self, text: str, line_num: int, stmt: AbapStatement,
+        source_file: str, result: TransformResult
+    ) -> str:
+        """Detect and rewrite SELECT JOINs on merged tables (MKPF+MSEG→MATDOC, etc.)."""
+        if stmt.type != AbapStatementType.SELECT:
+            return text
+        select_obj = stmt.select
+        if not select_obj:
+            return text
+
+        upper_text = text.upper()
+        all_tables = set(t.upper() for t in select_obj.from_tables + select_obj.join_tables)
+
+        # --- Pattern 1: Explicit JOIN between two tables that merge into one ---
+        # Pairs: (old_table_A, old_table_B, rewrite_rule_id)
+        merge_pairs = [
+            ({"MKPF", "MSEG"}, "SELRW_MM_001"),
+            ({"BKPF", "BSEG"}, "SELRW_FI_001"),
+        ]
+
+        for required_tables, rule_id in merge_pairs:
+            if required_tables.issubset(all_tables):
+                rule = self.rules.get_rule_by_id(rule_id)
+                if not rule or not self._module_allowed(rule.sap_module):
+                    continue
+
+                new_table = rule.new_pattern
+                # For AUTO rules, perform the text rewrite
+                if rule.auto_fix and rule.severity == "AUTO":
+                    # Replace "FROM MKPF INNER JOIN MSEG ON ..." → "FROM MATDOC"
+                    # Also handle "FROM MKPF JOIN MSEG ON ..."
+                    tables_sorted = sorted(required_tables)
+                    t1, t2 = tables_sorted
+                    # Remove JOIN clause: FROM t1 [INNER|LEFT] JOIN t2 ON ...
+                    join_pattern = re.compile(
+                        r'(?i)\bFROM\s+' + t1 +
+                        r'\s+(?:(?:INNER|LEFT|RIGHT)\s+)?JOIN\s+' + t2 +
+                        r'\s+ON\s+[^)]*?(?=\s+(?:INTO|WHERE|ORDER|GROUP|HAVING|FOR|APPENDING)\b)',
+                        re.DOTALL
+                    )
+                    m = join_pattern.search(text)
+                    if m:
+                        text = text[:m.start()] + f"FROM {new_table} " + text[m.end():]
+                    else:
+                        # Try reverse order
+                        join_pattern2 = re.compile(
+                            r'(?i)\bFROM\s+' + t2 +
+                            r'\s+(?:(?:INNER|LEFT|RIGHT)\s+)?JOIN\s+' + t1 +
+                            r'\s+ON\s+[^)]*?(?=\s+(?:INTO|WHERE|ORDER|GROUP|HAVING|FOR|APPENDING)\b)',
+                            re.DOTALL
+                        )
+                        m2 = join_pattern2.search(text)
+                        if m2:
+                            text = text[:m2.start()] + f"FROM {new_table} " + text[m2.end():]
+
+                    # Replace table-qualified field references: MKPF~FIELD → MATDOC_FIELD
+                    for old_field, new_field in rule.field_mapping.items():
+                        if "~" in old_field:
+                            text = re.sub(
+                                r'(?i)\b' + re.escape(old_field) + r'\b',
+                                new_field, text
+                            )
+
+                # Record the change
+                field_map_preview = ", ".join(
+                    f"{k}→{v}" for k, v in list(rule.field_mapping.items())[:6]
+                )
+                result.add_change(ChangeRecord(
+                    file=source_file,
+                    line_number=line_num,
+                    category="SELECT_REWRITE",
+                    sap_module=rule.sap_module,
+                    severity=rule.severity,
+                    old_value=f"JOIN: {' + '.join(sorted(required_tables))}",
+                    new_value=f"Single table: {new_table}",
+                    rule_id=rule_id,
+                    description=rule.description,
+                    description_ja=rule.description_ja,
+                ))
+                if rule.field_mapping:
+                    result.add_change(ChangeRecord(
+                        file=source_file,
+                        line_number=line_num,
+                        category="SELECT_REWRITE",
+                        sap_module=rule.sap_module,
+                        severity="REVIEW",
+                        old_value=f"Field references in JOIN",
+                        new_value=f"Field mapping: {field_map_preview}...",
+                        rule_id=f"{rule_id}_FIELDS",
+                        description=f"Field names changed: {field_map_preview}",
+                        description_ja=f"フィールド名変更: {field_map_preview}",
+                    ))
+                break  # Only apply first matching merge pair
+
+        # --- Pattern 2: Multiple separate SELECTs on related tables ---
+        # Detect SELECT from a single deprecated table and suggest rewrite
+        single_table_rewrites = {
+            "BSIS": "SELRW_FI_003", "BSAS": "SELRW_FI_003",
+            "BSID": "SELRW_FI_004", "BSAD": "SELRW_FI_004",
+            "BSIK": "SELRW_FI_005", "BSAK": "SELRW_FI_005",
+            "GLT0": "SELRW_FI_006", "FAGLFLEXT": "SELRW_FI_006",
+        }
+        for tbl in all_tables:
+            if tbl in single_table_rewrites:
+                rule_id = single_table_rewrites[tbl]
+                rule = self.rules.get_rule_by_id(rule_id)
+                if not rule or not self._module_allowed(rule.sap_module):
+                    continue
+                result.add_change(ChangeRecord(
+                    file=source_file,
+                    line_number=line_num,
+                    category="SELECT_REWRITE",
+                    sap_module=rule.sap_module,
+                    severity=rule.severity,
+                    old_value=f"SELECT FROM {tbl}",
+                    new_value=rule.new_pattern,
+                    rule_id=rule_id,
+                    description=rule.description,
+                    description_ja=rule.description_ja,
+                ))
+                break
 
         return text
 
