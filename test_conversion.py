@@ -58,7 +58,7 @@ ENDFORM.
 """
 
     program = parse_abap_string(source)
-    print(f"  Program ID: {program.program_id}")
+    print(f"  Report name: {program.report_name}")
     print(f"  Statements: {len(program.statements)}")
     print(f"  Data declarations: {len(program.data_declarations)}")
     print(f"  SELECT statements: {len(program.select_statements)}")

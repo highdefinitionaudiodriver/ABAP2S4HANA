@@ -1,0 +1,238 @@
+============================================================
+  ABAP2S4HANA v1.0.0 説明書
+  SAP ECC → S/4HANA ABAP自動変換ツール（GUI / CLI 対応）
+============================================================
+
+■ ソフト名
+  ABAP2S4HANA
+
+■ バージョン
+  1.0.0
+
+■ 作者名
+  highdefinitionaudiodriver
+
+■ 連絡先
+  GitHub: https://github.com/highdefinitionaudiodriver
+  リポジトリ: https://github.com/highdefinitionaudiodriver/ABAP2S4HANA
+  バグ報告・機能要望: highdefinitionaudiodriver@gmail.com
+
+■ 動作環境
+  対応OS: Windows 10 / 11（64bit推奨）
+          macOS, Linux（ソースから実行可）
+  必要メモリ: 512MB以上
+  ディスク容量: 約30MB（EXE単体）
+  ランタイム: 不要（EXE版は同梱済み。ソース版はPython 3.9以上）
+
+■ ソフト種別
+  フリーソフト（MITライセンス）
+
+■ カテゴリ
+  プログラミング > 変換・移行ツール
+
+■ 概要
+  ABAP2S4HANAは、SAP ECC環境のABAPソースコード（.abap, .txt, .prog）
+  をS/4HANA互換のABAPソースコードに自動変換するデスクトップ
+  アプリケーションです。
+
+  SAPの公式Simplification Listに基づき、テーブル名の置換、
+  JOIN文の自動簡略化、構文のモダナイズ、BAPI・汎用モジュールの
+  移行を一括で実行します。
+
+  さらに、変換結果の影響分析ダッシュボード（HTML/CSV）を
+  自動生成し、自動変換・要確認・手動対応の3段階で影響度を
+  視覚的に把握できます。
+
+  GUIとCLIの両方に対応しており、GUIで手軽に変換することも、
+  CLIでCI/CDパイプラインに組み込んで自動化することも可能です。
+
+■ 主な機能
+
+  【変換機能】
+  ・テーブル名の自動置換（BSEG→ACDOCA, MKPF+MSEG→MATDOC 等）
+  ・結合済みテーブルへのJOIN文の自動簡略化
+  ・ABAP構文のモダナイズ（MOVE→代入文, HEADER LINE廃止 等）
+  ・BAPI移行（廃止BAPIから後継BAPIへの置換）
+  ・汎用モジュール移行（廃止FMから後継FMへの置換）
+  ・EXEC SQL → Native SQL の変換対応
+  ・CDS View置換の検出・推奨
+  ・変換元ファイルの自動バックアップ
+  ・再帰的サブフォルダ一括変換（ディレクトリ構造を維持）
+
+  【ABAPパーサー】
+  ・93種以上のABAP文タイプに対応したAST（抽象構文木）生成
+  ・DATA宣言、SELECT文、CALL FUNCTION、CLASS定義の構造解析
+  ・TRY/CATCH、LOOP、IF/CASE等の制御構造解析
+  ・INCLUDE文、FORM/PERFORM文の解析
+  ・EXEC SQL文の検出と解析
+
+  【Simplification Rules エンジン】
+  ・SAPの公式Simplification List (S/4HANA 2023) に基づくルール
+  ・カテゴリ別分類: TABLE, FM, BAPI, SYNTAX, SQL
+  ・モジュール別分類: FI, CO, MM, SD, BP, ABAP, CROSS
+  ・自動(AUTO) / 要確認(REVIEW) / 手動(MANUAL) の3段階重要度
+
+  【影響分析レポート】
+  ・HTML形式のダッシュボード（グラフ・テーブル付き）
+  ・CSV形式の詳細レポート（Excel取り込み対応）
+  ・カテゴリ別・モジュール別・重要度別の集計
+  ・変換前後のコード差分表示
+
+  【SAPモジュール対応】
+  ・FI/CO（財務会計・管理会計）
+  ・MM（在庫購買管理）
+  ・SD（販売管理）
+  ・BP（ビジネスパートナー）
+  ・PP（生産計画）
+  ・ABAP Language（言語構文全般）
+  ・モジュール自動検出機能搭載
+
+  【GUI（59言語対応）】
+  ・入力/出力フォルダの選択
+  ・SAP ECCバージョン / S/4HANAターゲットバージョンの選択
+  ・エンコーディング・拡張子の設定
+  ・SAPモジュールフィルタ
+  ・7つの変換オプション切替
+    （構文モダナイズ, テーブル変換, BAPI変換, FM変換,
+     レポート生成, コメント追加, バックアップ）
+  ・リアルタイム変換ログ表示（色分け対応）
+  ・プログレスバーによる進捗表示
+  ・変換のキャンセル機能
+
+  【CLI モード】
+  ・ヘッドレス実行（-i, -o オプション指定）
+  ・CI/CDパイプラインへの組み込み対応
+  ・バッチ処理による大量ファイル一括変換
+
+■ 対応言語（UI）
+  59言語に対応:
+  日本語, English, 中文(簡体/繁体), 한국어, ไทย,
+  Tiếng Việt, Bahasa Indonesia, Bahasa Melayu,
+  हिन्दी, বাংলা, தமிழ், Français, Deutsch, Italiano,
+  Español, Português, Русский, Українська, Polski,
+  العربية, עברית, فارسی, Türkçe, Svenska, Suomi
+  ほか全59言語
+
+■ インストール方法
+
+  【EXE版（推奨・簡単）】
+  1. ABAP2S4HANA.exe をダウンロード
+  2. 任意のフォルダに配置（インストーラ不要）
+  3. ダブルクリックで起動
+  ※ Pythonやその他ランタイムのインストールは不要です。
+
+  【ソース版】
+  1. Python 3.9 以上をインストール
+  2. コマンドプロンプト（またはターミナル）で以下を実行:
+     git clone https://github.com/highdefinitionaudiodriver/ABAP2S4HANA.git
+     cd ABAP2S4HANA
+     python main.py
+
+■ 使い方
+
+  【GUI モード（デフォルト）】
+  1. ABAP2S4HANA.exe をダブルクリック（またはpython main.pyで起動）
+  2. 「入力フォルダ」に変換対象のABAPファイルがあるフォルダを指定
+  3. 「出力フォルダ」に変換後のABAPファイルの出力先を指定
+  4. 必要に応じてオプションを設定:
+     - ソースSAPバージョン（ECC 6.0 ～ 6.08）
+     - ターゲットS/4HANAバージョン（1709 ～ 2023）
+     - ソースエンコーディング（UTF-8, Shift_JIS, CP1252 等）
+     - ファイル拡張子（.abap, .txt, .prog, .ABAP）
+     - SAPモジュールフィルタ（ALL / FI/CO / MM / SD 等）
+     - 変換オプション（構文モダナイズ, テーブル変換 等）
+  5. 「変換」ボタンをクリック
+  6. ログパネルで変換の進捗を確認
+
+  【CLI モード】
+  基本:
+    ABAP2S4HANA.exe -i <入力フォルダ> -o <出力フォルダ>
+
+  例:
+    ABAP2S4HANA.exe -i ./abap_src -o ./s4_out
+    ABAP2S4HANA.exe -i ./abap_src -o ./s4_out --source-version "ECC 6.08" --target-version "S/4HANA 2023"
+    ABAP2S4HANA.exe -i ./abap_src -o ./s4_out --module FI/CO --no-backup
+
+  主なオプション:
+    -i, --input          : 入力フォルダ（必須）
+    -o, --output         : 出力フォルダ（必須）
+    -e, --encoding       : エンコーディング（デフォルト: utf-8）
+    --ext                : 拡張子リスト（デフォルト: .abap,.txt,.prog,.ABAP）
+    --source-version     : ソースSAPバージョン
+         ECC 6.0 / ECC 6.04 / ECC 6.05 / ECC 6.06 /
+         ECC 6.07 / ECC 6.08（デフォルト）
+    --target-version     : ターゲットS/4HANAバージョン
+         S/4HANA 1709 / 1809 / 1909 / 2020 / 2021 /
+         2022 / 2023（デフォルト）
+    --module             : SAPモジュールフィルタ
+         ALL（デフォルト）/ FI/CO / MM / SD / BP / PP /
+         ABAP Language
+    --report-format      : レポート形式 HTML / CSV / Both（デフォルト）
+    --no-modernize       : 構文モダナイズを無効化
+    --no-tables          : テーブル変換を無効化
+    --no-bapis           : BAPI変換を無効化
+    --no-fm              : 汎用モジュール変換を無効化
+    --no-report          : レポート生成を無効化
+    --no-comments        : 移行コメント追加を無効化
+    --no-backup          : 元ファイルのバックアップを無効化
+
+■ 出力ファイル
+  変換後に以下のファイルが出力されます:
+
+  <元ファイル名>_s4.<拡張子>   - S/4HANA変換済みABAPファイル
+  _backup/                      - 元ファイルのバックアップ（有効時）
+  _reports/
+    migration_report.html       - HTML形式の影響分析ダッシュボード
+    migration_report.csv        - CSV形式の詳細レポート
+
+■ ファイル構成（EXE版）
+  ABAP2S4HANA.exe           - 実行ファイル（これだけで動作します）
+
+■ ファイル構成（ソース版）
+  main.py                   - エントリポイント（CLI + GUI起動）
+  src/
+    abap_parser.py          - ABAPパーサー（AST生成・93文タイプ対応）
+    s4_transformer.py       - S/4HANA変換エンジン
+    simplification_rules.py - SAP Simplification Listルールベース
+    abap_generator.py       - 変換済みABAPコード生成
+    report_generator.py     - HTML/CSVレポート生成
+    vendor_modules.py       - SAPモジュール判定・CDS View対応
+    i18n.py                 - 多言語対応（59言語）
+  samples/                  - サンプルABAPファイル
+  test_conversion.py        - テストスイート
+  LICENSE                   - MITライセンス
+
+■ アンインストール方法
+  フォルダごと削除してください。
+  レジストリへの書き込みは一切行いません。
+
+■ 免責事項
+  本ソフトウェアの使用により生じたいかなる損害に対しても、
+  作者は一切の責任を負いません。
+  自己責任にてご利用ください。
+
+  変換後のABAPコードは必ずレビューとテストを行った上で
+  本番環境に適用してください。
+
+■ 著作権・ライセンス
+  Copyright (c) 2026 highdefinitionaudiodriver
+  MITライセンスに基づき自由に使用・改変・再配布できます。
+  詳細はLICENSEファイルを参照してください。
+
+■ 変更履歴
+
+  v1.0.0 (2026-03-28)
+    - 初版リリース
+    - ABAPパーサー（93文タイプ対応AST生成）
+    - S/4HANA変換エンジン（Simplification List準拠）
+    - テーブル名置換・JOIN自動簡略化
+    - BAPI・汎用モジュール移行
+    - 構文モダナイズ
+    - HTML/CSV影響分析ダッシュボード
+    - SAPモジュール自動検出（FI/CO, MM, SD, BP, PP）
+    - GUI / CLI 対応
+    - 59言語UI
+    - 再帰的サブフォルダ変換
+    - PyInstaller による EXE 生成対応
+
+============================================================
