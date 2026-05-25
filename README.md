@@ -87,3 +87,17 @@ python test_conversion.py
 - 個人・社内利用は無料（MIT ライセンス）
 - 法人・自治体・SI 向け導入支援、カスタマイズ、診断レポート受託は応相談
 - 連絡先：highdefinitionaudiodriver@gmail.com
+
+<!-- CODEX-CURRENT-STATUS:START -->
+## 現状サマリ (2026-05-25)
+
+- 対象: ABAP2S4HANA Migration Tool
+- 作業ブランチ: feat/sellable-v1
+- README更新時点の参照コミット: 7c51f1f chore: add .gitignore to ignore test generated outputs
+- Python 実行環境向けに requirements.txt を同梱。
+- docs ディレクトリ配下に設計・運用・補足資料を配置。
+- src ディレクトリ配下に主要実装を配置。
+- 主要な確認コマンド: python -m pytest または README 記載の Python コマンド
+- 次に進めるなら、README 内の利用手順と既存 docs / tests を起点に、未整備の検証手順・引き継ぎメモ・CI 化を補強する。
+<!-- CODEX-CURRENT-STATUS:END -->
+
