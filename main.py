@@ -342,10 +342,17 @@ class AbapToS4App:
         self.log_text.delete(1.0, tk.END)
 
     def _log(self, message: str, tag: str = "info"):
-        self.log_text.configure(state=tk.NORMAL)
+        # _run_conversion runs in a worker thread; Tkinter widgets must only be
+        # touched from the main thread, so marshal the actual append via after().
         timestamp = datetime.now().strftime("%H:%M:%S")
-        self.log_text.insert(tk.END, f"[{timestamp}] {message}\n", tag)
-        self.log_text.see(tk.END)
+        line = f"[{timestamp}] {message}\n"
+
+        def append():
+            self.log_text.configure(state=tk.NORMAL)
+            self.log_text.insert(tk.END, line, tag)
+            self.log_text.see(tk.END)
+
+        self.root.after(0, append)
 
     def _build_options(self) -> MigrationOptions:
         """Build MigrationOptions from the current GUI state."""
