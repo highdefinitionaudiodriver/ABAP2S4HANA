@@ -1,0 +1,13 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.6.0.schema.json
+PackageIdentifier: highdefinitionaudiodriver.ABAP2S4HANA
+PackageVersion: 0.1.0
+PackageLocale: ja-JP
+Publisher: highdefinitionaudiodriver
+PublisherUrl: https://github.com/highdefinitionaudiodriver
+PackageName: ABAP2S4HANA - SAP S/4HANA 移行支援ツール
+PackageUrl: https://github.com/highdefinitionaudiodriver/ABAP2S4HANA
+License: MIT
+ShortDescription: A dual-mode (GUI and CLI) Python application for SAP ECC ABAP modernization assessment and S/4HANA migration support.
+Moniker: abap2s4hana
+ManifestType: defaultLocale
+ManifestVersion: 1.6.0
